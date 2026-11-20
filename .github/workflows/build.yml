@@ -1,0 +1,169 @@
+name: AzlukPatcher V10 — Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags:     ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options: [debug, release]
+
+# Cancel in-progress runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION:        '17'
+  ANDROID_API_LEVEL:   '34'
+  BUILD_TOOLS_VERSION: '34.0.0'
+
+jobs:
+  build:
+    name: Build APK (${{ github.event.inputs.build_type || 'debug' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for version tagging
+
+      # ── Java ─────────────────────────────────────────────────────────────────
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version:  ${{ env.JAVA_VERSION }}
+          distribution:  temurin
+          cache:         gradle
+
+      # ── Android SDK ───────────────────────────────────────────────────────────
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API_LEVEL }}" \
+            "build-tools;${{ env.BUILD_TOOLS_VERSION }}"
+
+      # ── Gradle wrapper permissions ────────────────────────────────────────────
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # ── Gradle cache ─────────────────────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # ── Build debug ───────────────────────────────────────────────────────────
+      - name: Build Debug APK
+        if: github.event.inputs.build_type != 'release'
+        env:
+          TOKENROUTER_API_KEY:  ${{ secrets.TOKENROUTER_API_KEY }}
+          TOKENROUTER_BASE_URL: ${{ secrets.TOKENROUTER_BASE_URL }}
+          TOKENROUTER_MODEL:    ${{ secrets.TOKENROUTER_MODEL }}
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      # ── Build release ─────────────────────────────────────────────────────────
+      - name: Build Release APK
+        if: github.event.inputs.build_type == 'release' || startsWith(github.ref, 'refs/tags/v')
+        env:
+          TOKENROUTER_API_KEY:  ${{ secrets.TOKENROUTER_API_KEY }}
+          TOKENROUTER_BASE_URL: ${{ secrets.TOKENROUTER_BASE_URL }}
+          TOKENROUTER_MODEL:    ${{ secrets.TOKENROUTER_MODEL }}
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      # ── Rename APK with version + commit ─────────────────────────────────────
+      - name: Rename APK artifact
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle | head -1 | awk -F'"' '{print $2}')
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          BUILD_TYPE=${{ github.event.inputs.build_type || 'debug' }}
+
+          if [ "$BUILD_TYPE" = "release" ] || [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
+            DST="AzlukPatcher-v${VERSION}-${SHORT_SHA}-release.apk"
+          else
+            SRC="app/build/outputs/apk/debug/app-debug.apk"
+            DST="AzlukPatcher-v${VERSION}-${SHORT_SHA}-debug.apk"
+          fi
+
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "$DST"
+            echo "APK_PATH=$DST" >> $GITHUB_ENV
+            echo "APK_NAME=$DST" >> $GITHUB_ENV
+          else
+            echo "ERROR: APK not found at $SRC"
+            find app/build/outputs/apk -name "*.apk" | head -5
+            exit 1
+          fi
+
+      # ── Upload APK artifact ───────────────────────────────────────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name:            ${{ env.APK_NAME }}
+          path:            ${{ env.APK_PATH }}
+          retention-days:  30
+          if-no-files-found: error
+
+      # ── GitHub Release (on tag push) ──────────────────────────────────────────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name:       "AzlukPatcher ${{ github.ref_name }}"
+          body: |
+            ## AzlukPatcher ${{ github.ref_name }}
+
+            ### What's new in V10
+            - Bottom navigation bar (Apps / Files / Packs / Tools)
+            - Toast injection — every patched APK shows "AzlukPatcher" on launch
+            - 5 new structural patch recipes: SafetyNet, Frida, Emulator, FLAG_SECURE, Ad Domains
+            - Full Material3 redesign — Deep Void palette
+            - APatch root detection
+            - Fix double-patch bug on PatchLogScreen
+            - SHA-256 checksums with one-tap copy
+            - Session log export to AzlukPatcher/Logs/
+
+            ### Install
+            Download `AzlukPatcher-${{ github.ref_name }}-*.apk` below.
+            Enable *Install unknown apps* for your file manager before installing.
+          files:  ${{ env.APK_PATH }}
+          draft:  false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Build summary ─────────────────────────────────────────────────────────
+      - name: Build summary
+        if: always()
+        run: |
+          echo "### Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Ref | \`$GITHUB_REF\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| SHA | \`$GITHUB_SHA\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| APK | \`${APK_NAME:-not built}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ -f "${APK_PATH}" ]; then
+            SIZE=$(du -sh "${APK_PATH}" | cut -f1)
+            echo "| Size | $SIZE |" >> $GITHUB_STEP_SUMMARY
+          fi
