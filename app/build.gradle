@@ -1,0 +1,96 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+
+android {
+    compileSdk 34
+    namespace 'com.azluk.patcher'
+
+    defaultConfig {
+        applicationId "com.azluk.patcher"
+        minSdk 26
+        targetSdk 34
+        versionCode 10
+        versionName "10.0"
+
+        def trKey = [
+                System.getenv('TOKENROUTER_API_KEY'),
+                localProps.getProperty('TOKENROUTER_API_KEY')
+        ].find { it } ?: ''
+
+        def trModel = [
+                System.getenv('TOKENROUTER_MODEL'),
+                localProps.getProperty('TOKENROUTER_MODEL')
+        ].find { it } ?: 'openai/gpt-oss-20b'
+
+        def trBase = [
+                System.getenv('TOKENROUTER_BASE_URL'),
+                localProps.getProperty('TOKENROUTER_BASE_URL')
+        ].find { it } ?: 'https://api.groq.com/openai/v1'
+
+        buildConfigField "String", "TOKENROUTER_API_KEY", "\"$trKey\""
+        buildConfigField "String", "TOKENROUTER_MODEL", "\"$trModel\""
+        buildConfigField "String", "TOKENROUTER_BASE_URL", "\"$trBase\""
+    }
+
+    buildTypes {
+        debug { debuggable true; minifyEnabled false }
+        release { minifyEnabled false }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions { jvmTarget = '17' }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8'
+    }
+
+    lint { abortOnError false }
+
+    packaging {
+        resources { excludes += '/META-INF/{AL2.0,LGPL2.1}' }
+    }
+}
+
+dependencies {
+    def composeBom = platform('androidx.compose:compose-bom:2024.02.00')
+    implementation composeBom
+
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.compose.animation:animation'
+
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.7.0'
+    implementation 'androidx.navigation:navigation-compose:2.7.6'
+
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.android.tools.build:apksig:8.2.2'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'com.google.accompanist:accompanist-drawablepainter:0.32.0'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
