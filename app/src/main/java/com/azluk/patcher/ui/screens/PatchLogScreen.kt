@@ -7,6 +7,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -30,8 +31,10 @@ import androidx.navigation.NavController
 import com.azluk.patcher.core.*
 import com.azluk.patcher.ui.theme.*
 import com.azluk.patcher.viewmodel.PatchViewModel
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
+import java.util.zip.ZipInputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,10 +63,12 @@ fun PatchLogScreen(
         if (logLines.isNotEmpty()) logState.animateScrollToItem(logLines.size - 1)
     }
 
-    // Pulsing neon border animation
     val inf = rememberInfiniteTransition(label = "log_inf")
-    val pulse by inf.animateFloat(0.4f, 1f,
-        infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse), "pulse")
+    val pulse by inf.animateFloat(
+        0.4f, 1f,
+        infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
 
     DisposableEffect(Unit) {
         val filter   = IntentFilter("com.azluk.patcher.INSTALL_RESULT_LOCAL")
@@ -86,8 +91,8 @@ fun PatchLogScreen(
         onDispose { ctx.unregisterReceiver(receiver) }
     }
 
-    val bannerColor  = when { isSuccess -> NeonGreen; isFailure -> NeonRed; else -> NeonBlueBright }
-    val statusText   = when { isSuccess -> "PATCH COMPLETE"; isFailure -> "PATCH FAILED"; else -> "PATCHING…" }
+    val bannerColor = when { isSuccess -> NeonGreen; isFailure -> NeonRed; else -> NeonBlueBright }
+    val statusText  = when { isSuccess -> "PATCH COMPLETE"; isFailure -> "PATCH FAILED"; else -> "PATCHING…" }
 
     Scaffold(
         containerColor = VoidBlack,
@@ -111,43 +116,33 @@ fun PatchLogScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DeepNavy
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepNavy)
             )
         }
     ) { padding ->
         Column(
-            Modifier
-                .fillMaxSize()
-                .background(VoidBlack)
-                .padding(padding)
-                .padding(14.dp),
+            Modifier.fillMaxSize().background(VoidBlack).padding(padding).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Status banner ─────────────────────────────────────────────────
+            // Status banner
             Box(
-                Modifier
-                    .fillMaxWidth()
-                    .drawBehind {
-                        drawRoundRect(bannerColor.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
-                        drawRoundRect(
-                            bannerColor.copy(if (isRunning) pulse * 0.7f else 0.5f),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
-                            style = Stroke(1.5.dp.toPx())
-                        )
-                        if (isRunning) {
-                            // Animated glow sweep
-                            drawRect(
-                                brush   = Brush.horizontalGradient(
-                                    listOf(Color.Transparent, bannerColor.copy(0.05f), Color.Transparent),
-                                    startX = size.width * (pulse - 0.3f).coerceAtLeast(0f),
-                                    endX   = size.width * pulse
-                                )
+                Modifier.fillMaxWidth().drawBehind {
+                    drawRoundRect(bannerColor.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
+                    drawRoundRect(
+                        bannerColor.copy(if (isRunning) pulse * 0.7f else 0.5f),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
+                        style = Stroke(1.5.dp.toPx())
+                    )
+                    if (isRunning) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color.Transparent, bannerColor.copy(0.05f), Color.Transparent),
+                                startX = size.width * (pulse - 0.3f).coerceAtLeast(0f),
+                                endX   = size.width * pulse
                             )
-                        }
+                        )
                     }
-                    .padding(14.dp)
+                }.padding(14.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     when {
@@ -163,28 +158,22 @@ fun PatchLogScreen(
                 }
             }
 
-            // ── Live log terminal ─────────────────────────────────────────────
+            // Live log terminal
             Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .drawBehind {
-                        drawRoundRect(DeepNavy, cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
-                        drawRoundRect(
-                            Brush.horizontalGradient(
-                                listOf(NeonBlue.copy(0.3f), NeonBlueBright.copy(0.5f), NeonBlue.copy(0.3f))
-                            ),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
-                            style = Stroke(1.dp.toPx())
-                        )
-                    }
-                    .padding(12.dp)
+                Modifier.weight(1f).fillMaxWidth().drawBehind {
+                    drawRoundRect(DeepNavy, cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
+                    drawRoundRect(
+                        Brush.horizontalGradient(listOf(NeonBlue.copy(0.3f), NeonBlueBright.copy(0.5f), NeonBlue.copy(0.3f))),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
+                        style = Stroke(1.dp.toPx())
+                    )
+                }.padding(12.dp)
             ) {
                 Column {
                     Row(
-                        verticalAlignment     = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier              = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     ) {
                         Box(Modifier.size(8.dp).background(NeonRed, RoundedCornerShape(4.dp)))
                         Box(Modifier.size(8.dp).background(NeonOrange, RoundedCornerShape(4.dp)))
@@ -195,8 +184,6 @@ fun PatchLogScreen(
                         Spacer(Modifier.weight(1f))
                         if (logLines.isNotEmpty()) Text("${logLines.size} lines", color = TextDim.copy(0.5f), fontSize = 10.sp)
                     }
-
-                    // Terminal divider
                     Box(Modifier.fillMaxWidth().height(1.dp).background(
                         Brush.horizontalGradient(listOf(Color.Transparent, NeonBlue.copy(0.4f), Color.Transparent))
                     ))
@@ -218,58 +205,42 @@ fun PatchLogScreen(
                                     line.contains("skip")     || line.contains("no DEX")  -> NeonOrange
                                     else -> TextSecondary
                                 }
-                                Text(
-                                    "› $line",
-                                    color      = lineColor,
-                                    fontSize   = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    lineHeight = 15.sp
-                                )
+                                Text("› $line", color = lineColor, fontSize = 10.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
                             }
                         }
                     }
                 }
             }
 
-            // ── Install controls (success) ────────────────────────────────────
+            // Install controls (success)
             if (isSuccess) {
                 val outputPath = (state.patchState as PatchState.Success).outputPath
 
-                // Output file pill
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .drawBehind {
-                            drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()))
-                            drawRoundRect(NeonGreen.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()), style = Stroke(0.5.dp.toPx()))
-                        }
-                        .padding(10.dp)
+                    Modifier.fillMaxWidth().drawBehind {
+                        drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()))
+                        drawRoundRect(NeonGreen.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+                    }.padding(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.InsertDriveFile, null, tint = NeonGreen, modifier = Modifier.size(14.dp))
-                        Text(File(outputPath).name, color = NeonGreen, fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f), maxLines = 1)
+                        Text(File(outputPath).name, color = NeonGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f), maxLines = 1)
                     }
                 }
 
                 // Install button
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                Brush.horizontalGradient(listOf(NeonBlue, NeonBlueMid, NeonBlueBright)),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx())
-                            )
-                            // Neon glow
-                            drawRoundRect(
-                                NeonBlueBright.copy(pulse * 0.4f),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
-                                style = Stroke(2.dp.toPx())
-                            )
-                        }
-                        .clickable { installFileAuto(ctx, File(outputPath), vm) },
+                    Modifier.fillMaxWidth().height(50.dp).drawBehind {
+                        drawRoundRect(
+                            Brush.horizontalGradient(listOf(NeonBlue, NeonBlueMid, NeonBlueBright)),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx())
+                        )
+                        drawRoundRect(
+                            NeonBlueBright.copy(pulse * 0.4f),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
+                            style = Stroke(2.dp.toPx())
+                        )
+                    }.clickable { installFileAuto(ctx, File(outputPath), vm) },
                     contentAlignment = Alignment.Center
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -280,14 +251,10 @@ fun PatchLogScreen(
 
                 // System installer
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
-                        .drawBehind {
-                            drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
-                            drawRoundRect(NeonBlue.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(0.5.dp.toPx()))
-                        }
-                        .clickable { systemInstall(ctx, File(outputPath)) },
+                    Modifier.fillMaxWidth().height(42.dp).drawBehind {
+                        drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
+                        drawRoundRect(NeonBlue.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+                    }.clickable { systemInstall(ctx, File(outputPath)) },
                     contentAlignment = Alignment.Center
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -300,13 +267,10 @@ fun PatchLogScreen(
                 when (val ist = state.installState) {
                     is InstallState.Success -> {
                         Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .drawBehind {
-                                    drawRoundRect(NeonGreen.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
-                                    drawRoundRect(NeonGreen.copy(0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(1.dp.toPx()))
-                                }
-                                .padding(14.dp)
+                            Modifier.fillMaxWidth().drawBehind {
+                                drawRoundRect(NeonGreen.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
+                                drawRoundRect(NeonGreen.copy(0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(1.dp.toPx()))
+                            }.padding(14.dp)
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.CheckCircle, null, tint = NeonGreen, modifier = Modifier.size(20.dp))
@@ -316,13 +280,10 @@ fun PatchLogScreen(
                     }
                     is InstallState.Failure -> {
                         Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .drawBehind {
-                                    drawRoundRect(NeonRed.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
-                                    drawRoundRect(NeonRed.copy(0.35f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(1.dp.toPx()))
-                                }
-                                .padding(14.dp)
+                            Modifier.fillMaxWidth().drawBehind {
+                                drawRoundRect(NeonRed.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
+                                drawRoundRect(NeonRed.copy(0.35f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(1.dp.toPx()))
+                            }.padding(14.dp)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -343,13 +304,12 @@ fun PatchLogScreen(
                                 }
                                 if (ist.canRetry) {
                                     Box(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(40.dp)
-                                            .drawBehind {
-                                                drawRoundRect(Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-                                            }
-                                            .clickable { installFileAuto(ctx, File(outputPath), vm) },
+                                        Modifier.fillMaxWidth().height(40.dp).drawBehind {
+                                            drawRoundRect(
+                                                Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)),
+                                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx())
+                                            )
+                                        }.clickable { installFileAuto(ctx, File(outputPath), vm) },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -365,16 +325,14 @@ fun PatchLogScreen(
                 }
             }
 
-            // Fail — try again
             if (isFailure) {
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .drawBehind {
-                            drawRoundRect(Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
-                        }
-                        .clickable { vm.resetPatch(); navController.popBackStack() },
+                    Modifier.fillMaxWidth().height(46.dp).drawBehind {
+                        drawRoundRect(
+                            Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx())
+                        )
+                    }.clickable { vm.resetPatch(); navController.popBackStack() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("Try Again", color = VoidBlack, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -382,4 +340,88 @@ fun PatchLogScreen(
             }
         }
     }
+}
+
+// ── Install helpers (shared with PatchedFilesScreen) ─────────────────────────
+
+fun installFileAuto(ctx: android.content.Context, file: File, vm: PatchViewModel) {
+    if (!file.exists()) { Toast.makeText(ctx, "APK not found", Toast.LENGTH_SHORT).show(); return }
+    when (file.extension.lowercase()) {
+        "xapk", "apkm", "apks" -> doInstallContainer(ctx, file, vm)
+        else                    -> doInstall(ctx, file, vm)
+    }
+}
+
+fun doInstall(ctx: android.content.Context, file: File, vm: PatchViewModel) {
+    if (!file.exists()) { Toast.makeText(ctx, "APK not found", Toast.LENGTH_SHORT).show(); return }
+    try {
+        val pi     = ctx.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        val sid    = pi.createSession(params)
+        val s      = pi.openSession(sid)
+        FileInputStream(file).use { fis ->
+            s.openWrite("base.apk", 0, file.length()).use { os -> fis.copyTo(os, 65536); s.fsync(os) }
+        }
+        val intent = Intent("com.azluk.patcher.INSTALL_RESULT").apply { setPackage(ctx.packageName) }
+        val flags  = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        else PendingIntent.FLAG_UPDATE_CURRENT
+        s.commit(PendingIntent.getBroadcast(ctx, sid, intent, flags).intentSender)
+        s.close()
+    } catch (e: Exception) {
+        Toast.makeText(ctx, "Install error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun systemInstall(ctx: android.content.Context, file: File) {
+    if (!file.exists()) { Toast.makeText(ctx, "APK not found", Toast.LENGTH_SHORT).show(); return }
+    try {
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.provider", file)
+        ctx.startActivity(Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+    } catch (e: Exception) {
+        Toast.makeText(ctx, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun doInstallContainer(ctx: android.content.Context, file: File, vm: PatchViewModel) {
+    Thread {
+        var session: PackageInstaller.Session? = null
+        var sid = -1
+        try {
+            val pi     = ctx.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            sid        = pi.createSession(params)
+            val s      = pi.openSession(sid)
+            session    = s
+            var count  = 0
+            ZipInputStream(BufferedInputStream(FileInputStream(file), 256 * 1024)).use { zip ->
+                while (true) {
+                    val e = zip.nextEntry ?: break
+                    if (!e.isDirectory && e.name.endsWith(".apk", true)) {
+                        s.openWrite("split_$count.apk", 0, if (e.size > 0) e.size else -1L).use { os ->
+                            zip.copyTo(os, 65536); s.fsync(os)
+                        }
+                        count++
+                    }
+                    zip.closeEntry()
+                }
+            }
+            if (count == 0) throw IllegalStateException("No APK files in container")
+            val intent = Intent("com.azluk.patcher.INSTALL_RESULT").apply { setPackage(ctx.packageName) }
+            val flags  = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            else PendingIntent.FLAG_UPDATE_CURRENT
+            s.commit(PendingIntent.getBroadcast(ctx, sid, intent, flags).intentSender)
+            s.close(); session = null
+        } catch (e: Exception) {
+            try { session?.abandon() } catch (_: Exception) {}
+            android.os.Handler(ctx.mainLooper).post {
+                Toast.makeText(ctx, "Install error: ${e.message}", Toast.LENGTH_LONG).show()
+                vm.onInstallResult(-1, e.message)
+            }
+        }
+    }.start()
 }
