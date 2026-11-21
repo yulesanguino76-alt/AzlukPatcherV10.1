@@ -1,6 +1,5 @@
 package com.azluk.patcher.ui.screens
 
-import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageInstaller
 import android.net.Uri
@@ -9,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -34,12 +34,9 @@ import com.azluk.patcher.utils.StorageUtils
 import com.azluk.patcher.viewmodel.PatchViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedInputStream
 import java.io.File
-import java.io.FileInputStream
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.zip.ZipInputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,8 +54,11 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
     fun log(line: String) { mainH.post { installLog.add(line) } }
 
     val inf = rememberInfiniteTransition(label = "pf_inf")
-    val pulse by inf.animateFloat(0.4f, 0.9f,
-        infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse), "pulse")
+    val pulse by inf.animateFloat(
+        0.4f, 0.9f,
+        infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -66,7 +66,9 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
             withContext(Dispatchers.Main) { files = r }
         }
     }
-    LaunchedEffect(installLog.size) { if (installLog.isNotEmpty()) logState.animateScrollToItem(installLog.size - 1) }
+    LaunchedEffect(installLog.size) {
+        if (installLog.isNotEmpty()) logState.animateScrollToItem(installLog.size - 1)
+    }
 
     DisposableEffect(Unit) {
         val filter   = IntentFilter("com.azluk.patcher.INSTALL_RESULT_LOCAL")
@@ -85,8 +87,10 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                     }
                     else -> {
                         vm.onInstallResult(status, msg)
-                        installLog.add(if (status == PackageInstaller.STATUS_SUCCESS)
-                            "✅ Installation complete!" else "❌ Failed: ${msg ?: "code $status"}")
+                        installLog.add(
+                            if (status == PackageInstaller.STATUS_SUCCESS) "✅ Installation complete!"
+                            else "❌ Failed: ${msg ?: "code $status"}"
+                        )
                         activeFile = null
                     }
                 }
@@ -99,41 +103,53 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
     }
 
     fun refresh() { files = runCatching { StorageUtils.getPatchedFiles() }.getOrDefault(emptyList()) }
-    fun isContainer(f: File) = f.extension.lowercase() in setOf("xapk","apkm","apks")
+    fun isContainer(f: File) = f.extension.lowercase() in setOf("xapk", "apkm", "apks")
 
     fun doInstallWithLog(file: File) {
         activeFile = file.absolutePath; installLog.clear(); showLog = true
         installLog.add("🚀 Installing: ${file.name}")
-        installLog.add("📦 Size: ${"%.1f".format(file.length()/1048576f)} MB")
+        installLog.add("📦 Size: ${"%.1f".format(file.length() / 1048576f)} MB")
         try {
-            val pi = ctx.packageManager.packageInstaller
+            val pi     = ctx.packageManager.packageInstaller
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            val sid = pi.createSession(params); val s = pi.openSession(sid)
+            val sid    = pi.createSession(params)
+            val s      = pi.openSession(sid)
             installLog.add("🔧 Session #$sid created")
-            FileInputStream(file).use { fis -> s.openWrite("base.apk", 0, file.length()).use { os -> fis.copyTo(os, 65536); s.fsync(os) } }
+            java.io.FileInputStream(file).use { fis ->
+                s.openWrite("base.apk", 0, file.length()).use { os -> fis.copyTo(os, 65536); s.fsync(os) }
+            }
             installLog.add("✅ APK written")
             val ri = Intent("com.azluk.patcher.INSTALL_RESULT").apply { setPackage(ctx.packageName) }
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
-            s.commit(PendingIntent.getBroadcast(ctx, sid, ri, flags).intentSender); s.close()
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+            else android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            s.commit(android.app.PendingIntent.getBroadcast(ctx, sid, ri, flags).intentSender)
+            s.close()
             installLog.add("⏳ Waiting for Android installer…")
-        } catch (e: Exception) { installLog.add("❌ ${e.message}"); activeFile = null; vm.onInstallResult(-1, e.message) }
+        } catch (e: Exception) {
+            installLog.add("❌ ${e.message}"); activeFile = null; vm.onInstallResult(-1, e.message)
+        }
     }
 
     fun doInstallContainerWithLog(file: File) {
         activeFile = file.absolutePath; installLog.clear(); showLog = true
-        log("🚀 Container install: ${file.name}"); log("📦 Size: ${"%.1f".format(file.length()/1048576f)} MB")
+        log("🚀 Container install: ${file.name}")
+        log("📦 Size: ${"%.1f".format(file.length() / 1048576f)} MB")
         Thread {
             var session: PackageInstaller.Session? = null; var sid = -1
             try {
-                val pi = ctx.packageManager.packageInstaller
+                val pi     = ctx.packageManager.packageInstaller
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-                sid = pi.createSession(params); val s = pi.openSession(sid); session = s
+                sid        = pi.createSession(params)
+                val s      = pi.openSession(sid); session = s
                 log("🔧 Session #$sid"); var count = 0
-                ZipInputStream(BufferedInputStream(FileInputStream(file), 256*1024)).use { zip ->
+                java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(file), 256 * 1024)).use { zip ->
                     while (true) {
                         val e = zip.nextEntry ?: break
                         if (!e.isDirectory && e.name.endsWith(".apk", true)) {
-                            s.openWrite("split_$count.apk", 0, if (e.size > 0) e.size else -1L).use { os -> zip.copyTo(os, 65536); s.fsync(os) }
+                            s.openWrite("split_$count.apk", 0, if (e.size > 0) e.size else -1L).use { os ->
+                                zip.copyTo(os, 65536); s.fsync(os)
+                            }
                             count++; log("  ✅ ${e.name}")
                         }
                         zip.closeEntry()
@@ -142,8 +158,11 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                 if (count == 0) throw IllegalStateException("No APK files in container")
                 log("📦 $count APKs staged")
                 val ri = Intent("com.azluk.patcher.INSTALL_RESULT").apply { setPackage(ctx.packageName) }
-                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
-                s.commit(PendingIntent.getBroadcast(ctx, sid, ri, flags).intentSender); s.close(); session = null
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+                else android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                s.commit(android.app.PendingIntent.getBroadcast(ctx, sid, ri, flags).intentSender)
+                s.close(); session = null
                 log("⏳ Waiting for Android installer…")
             } catch (e: Exception) {
                 try { session?.abandon() } catch (_: Exception) {}
@@ -153,7 +172,9 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
         }.start()
     }
 
-    fun doInstallAuto(file: File) { if (isContainer(file)) doInstallContainerWithLog(file) else doInstallWithLog(file) }
+    fun doInstallAuto(file: File) {
+        if (isContainer(file)) doInstallContainerWithLog(file) else doInstallWithLog(file)
+    }
 
     Scaffold(
         containerColor = VoidBlack,
@@ -166,7 +187,9 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                     }
                 },
                 actions = {
-                    IconButton(onClick = ::refresh) { Icon(Icons.Default.Refresh, null, tint = NeonBlueMid) }
+                    IconButton(onClick = ::refresh) {
+                        Icon(Icons.Default.Refresh, null, tint = NeonBlueMid)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepNavy)
             )
@@ -174,19 +197,16 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).background(VoidBlack)) {
 
-            // ── Install log panel ─────────────────────────────────────────────
+            // Install log panel
             AnimatedVisibility(showLog, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .drawBehind {
-                            drawRect(DeepNavy)
-                            drawLine(
-                                Brush.horizontalGradient(listOf(Color.Transparent, NeonBlueBright.copy(pulse * 0.6f), Color.Transparent)),
-                                Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()
-                            )
-                        }
-                        .padding(12.dp)
+                    Modifier.fillMaxWidth().drawBehind {
+                        drawRect(DeepNavy)
+                        drawLine(
+                            Brush.horizontalGradient(listOf(Color.Transparent, NeonBlueBright.copy(pulse * 0.6f), Color.Transparent)),
+                            Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()
+                        )
+                    }.padding(12.dp)
                 ) {
                     Column {
                         Row(
@@ -195,7 +215,6 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                             verticalAlignment     = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                // Terminal dots
                                 Box(Modifier.size(7.dp).background(NeonRed, RoundedCornerShape(4.dp)))
                                 Box(Modifier.size(7.dp).background(NeonOrange, RoundedCornerShape(4.dp)))
                                 Box(Modifier.size(7.dp).background(NeonGreen, RoundedCornerShape(4.dp)))
@@ -207,9 +226,9 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                                 }
                                 Text("Install Log", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             }
-                            Icon(Icons.Default.Close, null, tint = TextDim, modifier = Modifier.size(16.dp).clickable { showLog = false })
+                            Icon(Icons.Default.Close, null, tint = TextDim,
+                                modifier = Modifier.size(16.dp).clickable { showLog = false })
                         }
-
                         Spacer(Modifier.height(6.dp))
                         Box(Modifier.fillMaxWidth().height(0.5.dp).background(NeonBlue.copy(0.3f)))
                         Spacer(Modifier.height(6.dp))
@@ -234,7 +253,6 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                             }
                         }
 
-                        // AI suggestion
                         val ai = state.aiDiagnosis
                         if (ai.loading || ai.suggestion.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
@@ -259,7 +277,6 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                             }
                         }
 
-                        // Install result
                         when (val ist = state.installState) {
                             is InstallState.Success -> {
                                 Spacer(Modifier.height(8.dp))
@@ -272,13 +289,12 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                                 if (ist.canRetry && activeFile != null) {
                                     Spacer(Modifier.height(8.dp))
                                     Box(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(38.dp)
-                                            .drawBehind {
-                                                drawRoundRect(Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-                                            }
-                                            .clickable { activeFile?.let { doInstallAuto(File(it)) } },
+                                        Modifier.fillMaxWidth().height(38.dp).drawBehind {
+                                            drawRoundRect(
+                                                Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)),
+                                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx())
+                                            )
+                                        }.clickable { activeFile?.let { doInstallAuto(File(it)) } },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text("Retry", color = VoidBlack, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -291,7 +307,7 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                 }
             }
 
-            // ── File list ─────────────────────────────────────────────────────
+            // File list
             if (files.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -308,7 +324,7 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                         val guessedPkg   = remember(file.name) {
                             file.nameWithoutExtension.removeSuffix("_azluk_v8").removeSuffix("_azluk")
                         }
-                        val isInstalled  = remember(guessedPkg) {
+                        val isInstalled = remember(guessedPkg) {
                             runCatching { ctx.packageManager.getPackageInfo(guessedPkg, 0); true }.getOrDefault(false)
                         }
                         NeonFileCard(
@@ -320,10 +336,14 @@ fun PatchedFilesScreen(navController: NavController, vm: PatchViewModel = viewMo
                             pulse        = pulse,
                             onInstall    = { doInstallAuto(file) },
                             onReinstall  = {
-                                ctx.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$guessedPkg")).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                                ctx.startActivity(
+                                    Intent(Intent.ACTION_DELETE, Uri.parse("package:$guessedPkg")).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                )
                                 Toast.makeText(ctx, "Uninstall first, then Install", Toast.LENGTH_LONG).show()
                             },
-                            onDelete     = { file.delete(); refresh() }
+                            onDelete = { file.delete(); refresh() }
                         )
                     }
                     item { Spacer(Modifier.height(80.dp)) }
@@ -344,29 +364,24 @@ private fun NeonFileCard(
     val borderColor = when { isInstalling -> NeonBlueBright; isInstalled -> NeonGreen; else -> NeonBlue.copy(0.4f) }
 
     Box(
-        Modifier
-            .fillMaxWidth()
-            .drawBehind {
-                drawRoundRect(DeepNavy, cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()))
-                drawRoundRect(
-                    if (isInstalling) borderColor.copy(pulse * 0.8f) else borderColor,
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()),
-                    style = Stroke(1.dp.toPx())
-                )
-            }
+        Modifier.fillMaxWidth().drawBehind {
+            drawRoundRect(DeepNavy, cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()))
+            drawRoundRect(
+                if (isInstalling) borderColor.copy(pulse * 0.8f) else borderColor,
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()),
+                style = Stroke(1.dp.toPx())
+            )
+        }
     ) {
         Column {
             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Icon
                 Box(
-                    Modifier
-                        .size(48.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                if (isInstalling) NeonBlueBright.copy(0.2f) else NeonBlueMid.copy(0.1f),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx())
-                            )
-                        },
+                    Modifier.size(48.dp).drawBehind {
+                        drawRoundRect(
+                            if (isInstalling) NeonBlueBright.copy(0.2f) else NeonBlueMid.copy(0.1f),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx())
+                        )
+                    },
                     contentAlignment = Alignment.Center
                 ) {
                     if (isInstalling) {
@@ -384,16 +399,15 @@ private fun NeonFileCard(
                 Column(Modifier.weight(1f)) {
                     Text(file.name, color = NeonWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                         fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${"%.1f".format(file.length()/1048576f)} MB · $date",
-                        color = TextDim, fontSize = 11.sp)
+                    Text("${"%.1f".format(file.length() / 1048576f)} MB · $date", color = TextDim, fontSize = 11.sp)
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         when {
-                            isInstalling -> NeonMiniTagInline("INSTALLING", NeonBlueBright)
-                            isContainer  -> NeonMiniTagInline("SPLITS", NeonOrange)
-                            isInstalled  -> NeonMiniTagInline("INSTALLED", NeonGreen)
+                            isInstalling -> NeonMiniTagPFS("INSTALLING", NeonBlueBright)
+                            isContainer  -> NeonMiniTagPFS("SPLITS",     NeonOrange)
+                            isInstalled  -> NeonMiniTagPFS("INSTALLED",  NeonGreen)
                         }
-                        NeonMiniTagInline(file.extension.uppercase(), NeonBlueMid)
+                        NeonMiniTagPFS(file.extension.uppercase(), NeonBlueMid)
                     }
                 }
 
@@ -409,14 +423,13 @@ private fun NeonFileCard(
                     Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Install
                     Box(
-                        Modifier
-                            .weight(1f).height(38.dp)
-                            .drawBehind {
-                                drawRoundRect(Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-                            }
-                            .clickable(enabled = !isInstalling) { expanded = false; onInstall() },
+                        Modifier.weight(1f).height(38.dp).drawBehind {
+                            drawRoundRect(
+                                Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx())
+                            )
+                        }.clickable(enabled = !isInstalling) { expanded = false; onInstall() },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -425,16 +438,12 @@ private fun NeonFileCard(
                         }
                     }
 
-                    // Reinstall
                     if (isInstalled && !isContainer) {
                         Box(
-                            Modifier
-                                .weight(1.2f).height(38.dp)
-                                .drawBehind {
-                                    drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-                                    drawRoundRect(NeonOrange.copy(0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = Stroke(0.5.dp.toPx()))
-                                }
-                                .clickable { expanded = false; onReinstall() },
+                            Modifier.weight(1.2f).height(38.dp).drawBehind {
+                                drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
+                                drawRoundRect(NeonOrange.copy(0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+                            }.clickable { expanded = false; onReinstall() },
                             contentAlignment = Alignment.Center
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -444,15 +453,11 @@ private fun NeonFileCard(
                         }
                     }
 
-                    // Delete
                     Box(
-                        Modifier
-                            .size(38.dp)
-                            .drawBehind {
-                                drawRoundRect(NeonRed.copy(0.1f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-                                drawRoundRect(NeonRed.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = Stroke(0.5.dp.toPx()))
-                            }
-                            .clickable { onDelete() },
+                        Modifier.size(38.dp).drawBehind {
+                            drawRoundRect(NeonRed.copy(0.1f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
+                            drawRoundRect(NeonRed.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+                        }.clickable { onDelete() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.DeleteOutline, null, tint = NeonRed, modifier = Modifier.size(18.dp))
@@ -464,14 +469,12 @@ private fun NeonFileCard(
 }
 
 @Composable
-private fun NeonMiniTagInline(text: String, color: Color) {
+private fun NeonMiniTagPFS(text: String, color: Color) {
     Box(
-        Modifier
-            .drawBehind {
-                drawRoundRect(color.copy(0.12f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
-                drawRoundRect(color.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()), style = Stroke(0.5.dp.toPx()))
-            }
-            .padding(horizontal = 5.dp, vertical = 2.dp)
+        Modifier.drawBehind {
+            drawRoundRect(color.copy(0.12f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
+            drawRoundRect(color.copy(0.3f),  cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+        }.padding(horizontal = 5.dp, vertical = 2.dp)
     ) {
         Text(text, color = color, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.3.sp)
     }
