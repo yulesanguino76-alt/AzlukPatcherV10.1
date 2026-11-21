@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -19,7 +20,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +51,11 @@ data class AppDetails(
     val icon: Drawable?
 )
 
-data class DetailScanUi(val loading: Boolean = false, val error: String? = null, val results: List<ScanResult> = emptyList())
+data class DetailScanUi(
+    val loading: Boolean = false,
+    val error: String? = null,
+    val results: List<ScanResult> = emptyList()
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,32 +63,42 @@ fun DetailScreen(pkg: String, navController: NavController) {
     val ctx = LocalContext.current
     val pm  = ctx.packageManager
     val inf = rememberInfiniteTransition(label = "detail_inf")
-    val pulse by inf.animateFloat(0.4f, 0.9f,
-        infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse), "pulse")
+    val pulse by inf.animateFloat(
+        0.4f, 0.9f,
+        infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
 
     val details = remember(pkg) {
         try {
             val ai = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
-            val pi = pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS or PackageManager.GET_ACTIVITIES or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS)
+            val pi = pm.getPackageInfo(
+                pkg,
+                PackageManager.GET_PERMISSIONS or
+                PackageManager.GET_ACTIVITIES or
+                PackageManager.GET_SERVICES or
+                PackageManager.GET_RECEIVERS
+            )
             AppDetails(
-                name        = pm.getApplicationLabel(ai).toString(),
-                pkg         = pkg,
-                version     = pi.versionName ?: "?",
-                versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong(),
-                apkSize     = File(ai.sourceDir).length(),
-                installDate = pi.firstInstallTime,
-                updateDate  = pi.lastUpdateTime,
-                isSystem    = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                isDebuggable= (ai.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
-                dataDir     = ai.dataDir ?: "N/A",
-                nativeLibDir= ai.nativeLibraryDir ?: "N/A",
-                targetSdk   = ai.targetSdkVersion,
-                minSdk      = if (android.os.Build.VERSION.SDK_INT >= 24) ai.minSdkVersion else 0,
-                permissions = pi.requestedPermissions?.toList() ?: emptyList(),
-                activities  = pi.activities?.map { it.name.substringAfterLast(".") } ?: emptyList(),
-                services    = pi.services?.map { it.name.substringAfterLast(".") } ?: emptyList(),
-                receivers   = pi.receivers?.map { it.name.substringAfterLast(".") } ?: emptyList(),
-                icon        = try { pm.getApplicationIcon(ai) } catch (_: Exception) { null }
+                name         = pm.getApplicationLabel(ai).toString(),
+                pkg          = pkg,
+                version      = pi.versionName ?: "?",
+                versionCode  = if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode
+                               else @Suppress("DEPRECATION") pi.versionCode.toLong(),
+                apkSize      = File(ai.sourceDir).length(),
+                installDate  = pi.firstInstallTime,
+                updateDate   = pi.lastUpdateTime,
+                isSystem     = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                isDebuggable = (ai.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
+                dataDir      = ai.dataDir ?: "N/A",
+                nativeLibDir = ai.nativeLibraryDir ?: "N/A",
+                targetSdk    = ai.targetSdkVersion,
+                minSdk       = if (android.os.Build.VERSION.SDK_INT >= 24) ai.minSdkVersion else 0,
+                permissions  = pi.requestedPermissions?.toList() ?: emptyList(),
+                activities   = pi.activities?.map { it.name.substringAfterLast(".") } ?: emptyList(),
+                services     = pi.services?.map { it.name.substringAfterLast(".") } ?: emptyList(),
+                receivers    = pi.receivers?.map { it.name.substringAfterLast(".") } ?: emptyList(),
+                icon         = try { pm.getApplicationIcon(ai) } catch (_: Exception) { null }
             )
         } catch (e: Exception) { null }
     }
@@ -110,7 +127,12 @@ fun DetailScreen(pkg: String, navController: NavController) {
         containerColor = VoidBlack,
         topBar = {
             TopAppBar(
-                title = { Text(details.name, color = NeonWhite, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Text(
+                        details.name, color = NeonWhite, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = NeonBlueMid)
@@ -126,7 +148,9 @@ fun DetailScreen(pkg: String, navController: NavController) {
                     .drawBehind {
                         drawRect(DeepNavy)
                         drawLine(
-                            Brush.horizontalGradient(listOf(Color.Transparent, NeonBlueBright.copy(pulse * 0.6f), Color.Transparent)),
+                            Brush.horizontalGradient(
+                                listOf(Color.Transparent, NeonBlueBright.copy(pulse * 0.6f), Color.Transparent)
+                            ),
                             Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()
                         )
                     }
@@ -141,7 +165,10 @@ fun DetailScreen(pkg: String, navController: NavController) {
                                 drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
                                 drawRoundRect(NeonGreen.copy(0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(0.5.dp.toPx()))
                             }
-                            .clickable { try { ctx.startActivity(pm.getLaunchIntentForPackage(pkg) ?: return@clickable) } catch (_: Exception) {} },
+                            .clickable {
+                                try { ctx.startActivity(pm.getLaunchIntentForPackage(pkg) ?: return@clickable) }
+                                catch (_: Exception) {}
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -156,7 +183,11 @@ fun DetailScreen(pkg: String, navController: NavController) {
                                 drawRoundRect(DeepNavy2, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
                                 drawRoundRect(NeonBlue.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(0.5.dp.toPx()))
                             }
-                            .clickable { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))) },
+                            .clickable {
+                                ctx.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +199,10 @@ fun DetailScreen(pkg: String, navController: NavController) {
                     Box(
                         Modifier.weight(1.5f).height(44.dp)
                             .drawBehind {
-                                drawRoundRect(Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
+                                drawRoundRect(
+                                    Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)),
+                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx())
+                                )
                             }
                             .clickable { navController.navigate("patch/$pkg") },
                         contentAlignment = Alignment.Center
@@ -184,15 +218,16 @@ fun DetailScreen(pkg: String, navController: NavController) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).background(VoidBlack)) {
 
-            // ── App header ────────────────────────────────────────────────────
+            // App header
             Box(
                 Modifier
                     .fillMaxWidth()
                     .drawBehind {
                         drawRect(Brush.verticalGradient(listOf(DeepNavy2, VoidBlack)))
-                        // Bottom neon line
                         drawLine(
-                            Brush.horizontalGradient(listOf(Color.Transparent, NeonBlueMid.copy(pulse * 0.5f), Color.Transparent)),
+                            Brush.horizontalGradient(
+                                listOf(Color.Transparent, NeonBlueMid.copy(pulse * 0.5f), Color.Transparent)
+                            ),
                             Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()
                         )
                     }
@@ -230,19 +265,15 @@ fun DetailScreen(pkg: String, navController: NavController) {
                 }
             }
 
-            // ── Tabs ──────────────────────────────────────────────────────────
+            // Tabs
             val tabs = listOf("Info", "Patches", "Permissions", "Components")
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(DeepNavy)
-                    .padding(horizontal = 8.dp)
+                Modifier.fillMaxWidth().background(DeepNavy).padding(horizontal = 8.dp)
             ) {
                 tabs.forEachIndexed { i, t ->
                     val sel = activeTab == i
                     Box(
-                        Modifier
-                            .weight(1f)
+                        Modifier.weight(1f)
                             .drawBehind {
                                 if (sel) drawLine(
                                     Brush.horizontalGradient(listOf(NeonBlue, NeonBlueBright)),
@@ -253,8 +284,12 @@ fun DetailScreen(pkg: String, navController: NavController) {
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(t, color = if (sel) NeonBlueBright else TextDim, fontSize = 12.sp,
-                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                        Text(
+                            t,
+                            color      = if (sel) NeonBlueBright else TextDim,
+                            fontSize   = 12.sp,
+                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
                 }
             }
@@ -269,29 +304,34 @@ fun DetailScreen(pkg: String, navController: NavController) {
     }
 }
 
-@Composable private fun DetailInfoTab(d: AppDetails, fmt: SimpleDateFormat) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+@Composable
+private fun DetailInfoTab(d: AppDetails, fmt: SimpleDateFormat) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         NeonInfoSection("Package") {
-            NeonInfoRow("Package", d.pkg)
-            NeonInfoRow("Version", "${d.version} (${d.versionCode})")
-            NeonInfoRow("APK Size", fmtSz(d.apkSize))
-            NeonInfoRow("Target SDK", "API ${d.targetSdk}")
-            NeonInfoRow("Min SDK", "API ${d.minSdk}")
-            NeonInfoRow("Type", if (d.isSystem) "System" else "User App")
-            NeonInfoRow("Debuggable", if (d.isDebuggable) "Yes" else "No")
+            NeonInfoRow("Package",   d.pkg)
+            NeonInfoRow("Version",   "${d.version} (${d.versionCode})")
+            NeonInfoRow("APK Size",  fmtSz(d.apkSize))
+            NeonInfoRow("Target SDK","API ${d.targetSdk}")
+            NeonInfoRow("Min SDK",   "API ${d.minSdk}")
+            NeonInfoRow("Type",      if (d.isSystem) "System" else "User App")
+            NeonInfoRow("Debuggable",if (d.isDebuggable) "Yes" else "No")
         }
         NeonInfoSection("Timeline") {
             NeonInfoRow("Installed", fmt.format(Date(d.installDate)))
-            NeonInfoRow("Updated", fmt.format(Date(d.updateDate)))
+            NeonInfoRow("Updated",   fmt.format(Date(d.updateDate)))
         }
         NeonInfoSection("Paths") {
-            NeonInfoRow("Data", d.dataDir)
+            NeonInfoRow("Data",   d.dataDir)
             NeonInfoRow("Native", d.nativeLibDir)
         }
     }
 }
 
-@Composable private fun DetailPatchesTab(ui: DetailScanUi) {
+@Composable
+private fun DetailPatchesTab(ui: DetailScanUi) {
     when {
         ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -308,20 +348,35 @@ fun DetailScreen(pkg: String, navController: NavController) {
             }
         }
         else -> {
-            val detected = ui.results.mapNotNull { runCatching { PatchType.valueOf(it.patchType) }.getOrNull() }
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val detected = ui.results.mapNotNull {
+                runCatching { PatchType.valueOf(it.patchType) }.getOrNull()
+            }
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Box(
                     Modifier.fillMaxWidth().drawBehind {
-                        drawRoundRect(if (detected.isEmpty()) DeepNavy else NeonGreen.copy(0.08f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
-                        drawRoundRect(if (detected.isEmpty()) NeonBlue.copy(0.2f) else NeonGreen.copy(0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+                        val c = if (detected.isEmpty()) NeonBlue.copy(0.2f) else NeonGreen.copy(0.4f)
+                        drawRoundRect(
+                            if (detected.isEmpty()) DeepNavy else NeonGreen.copy(0.08f),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx())
+                        )
+                        drawRoundRect(c, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()), style = Stroke(0.5.dp.toPx()))
                     }.padding(14.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (detected.isEmpty()) Icons.Default.SearchOff else Icons.Default.CheckCircle, null,
-                            Modifier.size(18.dp), tint = if (detected.isEmpty()) TextDim else NeonGreen)
+                        Icon(
+                            if (detected.isEmpty()) Icons.Default.SearchOff else Icons.Default.CheckCircle,
+                            null, Modifier.size(18.dp),
+                            tint = if (detected.isEmpty()) TextDim else NeonGreen
+                        )
                         Spacer(Modifier.width(10.dp))
-                        Text(if (detected.isEmpty()) "No patches auto-detected" else "${detected.size} patches available",
-                            color = if (detected.isEmpty()) TextDim else NeonGreen, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text(
+                            if (detected.isEmpty()) "No patches auto-detected" else "${detected.size} patches available",
+                            color = if (detected.isEmpty()) TextDim else NeonGreen,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp
+                        )
                     }
                 }
                 ui.results.forEach { r ->
@@ -349,15 +404,27 @@ fun DetailScreen(pkg: String, navController: NavController) {
 }
 
 private fun catNeonColorDetail(t: PatchType) = when (t.category) {
-    "bypass" -> NeonBlueBright; "ads" -> NeonOrange; "security" -> NeonRed; "dev" -> NeonCyan; else -> NeonGreen
+    "bypass"   -> NeonBlueBright
+    "ads"      -> NeonOrange
+    "security" -> NeonRed
+    "dev"      -> NeonCyan
+    else       -> NeonGreen
 }
 
-@Composable private fun DetailPermsTab(perms: List<String>) {
-    if (perms.isEmpty()) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No permissions", color = TextDim) }; return }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+@Composable
+private fun DetailPermsTab(perms: List<String>) {
+    if (perms.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No permissions", color = TextDim) }
+        return
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
         Text("${perms.size} permissions", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
         perms.forEach { p ->
-            val danger = p.contains("READ_") || p.contains("WRITE_") || p.contains("LOCATION") || p.contains("CAMERA") || p.contains("CONTACTS") || p.contains("PHONE") || p.contains("SMS")
+            val danger = p.contains("READ_") || p.contains("WRITE_") || p.contains("LOCATION") ||
+                         p.contains("CAMERA") || p.contains("CONTACTS") || p.contains("PHONE") || p.contains("SMS")
             val c = if (danger) NeonOrange else TextDim
             Box(
                 Modifier.fillMaxWidth().drawBehind {
@@ -375,15 +442,20 @@ private fun catNeonColorDetail(t: PatchType) = when (t.category) {
     }
 }
 
-@Composable private fun DetailComponentsTab(d: AppDetails) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        DetailCompSection("Activities (${d.activities.size})", Icons.Default.Window, d.activities, NeonBlueMid)
-        DetailCompSection("Services (${d.services.size})", Icons.Default.Dns, d.services, NeonGreen)
-        DetailCompSection("Receivers (${d.receivers.size})", Icons.Default.Notifications, d.receivers, NeonOrange)
+@Composable
+private fun DetailComponentsTab(d: AppDetails) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        DetailCompSection("Activities (${d.activities.size})",  Icons.Default.Window,        d.activities, NeonBlueMid)
+        DetailCompSection("Services (${d.services.size})",      Icons.Default.Dns,           d.services,   NeonGreen)
+        DetailCompSection("Receivers (${d.receivers.size})",    Icons.Default.Notifications, d.receivers,  NeonOrange)
     }
 }
 
-@Composable private fun DetailCompSection(title: String, icon: ImageVector, items: List<String>, color: Color) {
+@Composable
+private fun DetailCompSection(title: String, icon: ImageVector, items: List<String>, color: Color) {
     if (items.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -403,7 +475,8 @@ private fun catNeonColorDetail(t: PatchType) = when (t.category) {
     }
 }
 
-@Composable private fun NeonInfoSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+@Composable
+private fun NeonInfoSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Box(
         Modifier.fillMaxWidth().drawBehind {
             drawRoundRect(DeepNavy, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx()))
@@ -412,7 +485,10 @@ private fun catNeonColorDetail(t: PatchType) = when (t.category) {
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(2.dp).height(12.dp).background(Brush.verticalGradient(listOf(NeonBlueBright, NeonBlue.copy(0.3f))), RoundedCornerShape(1.dp)))
+                Box(
+                    Modifier.width(2.dp).height(12.dp)
+                        .background(Brush.verticalGradient(listOf(NeonBlueBright, NeonBlue.copy(0.3f))), RoundedCornerShape(1.dp))
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(title, color = NeonBlueBright, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
             }
@@ -422,18 +498,21 @@ private fun catNeonColorDetail(t: PatchType) = when (t.category) {
     }
 }
 
-@Composable private fun NeonInfoRow(label: String, value: String) {
+@Composable
+private fun NeonInfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = TextDim, fontSize = 11.sp)
-        Text(value, color = NeonWhite, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
+        Text(value, color = NeonWhite, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
     }
 }
 
-@Composable private fun NeonDetailChip(text: String, color: Color) {
+@Composable
+private fun NeonDetailChip(text: String, color: Color) {
     Box(
         Modifier.drawBehind {
             drawRoundRect(color.copy(0.12f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()))
-            drawRoundRect(color.copy(0.3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()), style = Stroke(0.5.dp.toPx()))
+            drawRoundRect(color.copy(0.3f),  cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()), style = Stroke(0.5.dp.toPx()))
         }.padding(horizontal = 7.dp, vertical = 3.dp)
     ) {
         Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
@@ -441,6 +520,8 @@ private fun catNeonColorDetail(t: PatchType) = when (t.category) {
 }
 
 private fun fmtSz(b: Long) = when {
-    b < 1024 -> "$b B"; b < 1024*1024 -> "%.1f KB".format(b/1024f)
-    b < 1024L*1024*1024 -> "%.1f MB".format(b/(1024f*1024)); else -> "%.2f GB".format(b/(1024f*1024*1024))
+    b < 1024          -> "$b B"
+    b < 1024 * 1024   -> "%.1f KB".format(b / 1024f)
+    b < 1024L*1024*1024 -> "%.1f MB".format(b / (1024f * 1024))
+    else              -> "%.2f GB".format(b / (1024f * 1024 * 1024))
 }
